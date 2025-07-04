@@ -138,19 +138,24 @@ monthly_df = actual_df.groupby("month").agg({
 }).reset_index()
 
 daily_cases = actual_df["new_cases"].values
-# Ensure create_sequences and build_and_train are properly defined in model.py
 X, y, scaler = create_sequences(daily_cases, time_steps=7)
-model = build_and_train(X, y, epochs=20)
+
+# 🔧 Flatten X from (samples, time_steps, 1) → (samples, time_steps)
+X = X.reshape(X.shape[0], -1)
+
+model = build_and_train(X, y)
+
 
 future_dates = pd.date_range("2025-07-01", "2025-12-31")
 future_preds = []
-last_seq = daily_cases[-7:] # Get last 7 days for initial prediction input
+last_seq = daily_cases[-7:]  # Get last 7 days
+
 for _ in range(len(future_dates)):
-    seq_scaled = scaler.transform(np.array(last_seq).reshape(-1, 1)).reshape(1, 7, 1)
-    pred_scaled = model.predict(seq_scaled)
-    pred = scaler.inverse_transform(pred_scaled)[0][0] # Inverse transform to get actual case count
+    seq_scaled = scaler.transform(np.array(last_seq).reshape(-1, 1)).reshape(1, -1)  # Shape (1, 7)
+    pred_scaled = model.predict(seq_scaled).reshape(-1, 1)  # Ensure it's 2D
+    pred = scaler.inverse_transform(pred_scaled)[0][0]
     future_preds.append(pred)
-    last_seq = np.append(last_seq[1:], pred) # Update sequence for next prediction
+    last_seq = np.append(last_seq[1:], pred)  # Slide window
 
 pred_df = pd.DataFrame({
     "Date": future_dates,
